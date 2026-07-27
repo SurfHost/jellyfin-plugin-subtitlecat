@@ -9,6 +9,14 @@
     "imageUrl": "",
     "versions": [
       {
+        "version": "0.1.1",
+        "changelog": "See the GitHub release notes.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/SurfHost/jellyfin-plugin-subtitlecat/releases/download/v0.1.1/subtitlecat_0.1.1.zip",
+        "checksum": "083d18468709ecb1592818060382239a",
+        "timestamp": "2026-07-27T23:01:30Z"
+      },
+      {
         "version": "0.1.0",
         "changelog": "See the GitHub release notes.",
         "targetAbi": "10.11.0.0",
