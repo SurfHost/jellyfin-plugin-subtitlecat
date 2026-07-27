@@ -1,0 +1,219 @@
+name: Release
+
+# Builds the plugin, publishes (or updates) the GitHub release for the version in
+# meta.json, and keeps manifest.json in step with the built zip's checksum.
+#
+# The version is read from Jellyfin.Plugin.SubtitleCat/meta.json, which is the single
+# source of truth, so this works whether triggered by a tag push or run by hand from the
+# Actions tab. Every step is idempotent: re-running it for a version that already has a
+# release replaces that release's asset and refreshes the checksum instead of failing.
+#
+# To cut a release: bump <Version> in the csproj and "version" in meta.json, commit to
+# main, then either push a tag vX.Y.Z or run this workflow manually.
+#
+# The version-gate job below refuses the release when those files disagree with the tag,
+# because the release job builds from main rather than from the tagged commit: a tag
+# whose meta.json says something else would publish main's code under the tag's name.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # Release discipline: everything that names a version has to agree before a single
+  # artifact is built or published. Kept as its own job so a mismatch fails fast and
+  # visibly, and so the release job below stays about building and publishing.
+  version-gate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      # No "ref:" here on purpose. This checks out whatever was pushed (the tagged
+      # commit), which is the thing whose version claims are being verified.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify the tag, meta.json, the csproj and manifest.json agree
+        id: check
+        run: |
+          set -euo pipefail
+
+          META=$(jq -r '.version' Jellyfin.Plugin.SubtitleCat/meta.json)
+          if ! printf '%s' "$META" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "meta.json version must be MAJOR.MINOR.PATCH, got '$META'." >&2
+            exit 1
+          fi
+
+          CSPROJ=Jellyfin.Plugin.SubtitleCat/Jellyfin.Plugin.SubtitleCat.csproj
+          fail=0
+          for prop in Version AssemblyVersion FileVersion; do
+            value=$(sed -n "s:.*<${prop}>\(.*\)</${prop}>.*:\1:p" "$CSPROJ" | head -1)
+            if [ "$value" != "$META" ]; then
+              echo "$CSPROJ <$prop> is '$value' but meta.json says '$META'." >&2
+              fail=1
+            fi
+          done
+
+          # A drifted guid would make Jellyfin treat the release as a different plugin,
+          # so installs would not upgrade, they would sit side by side.
+          META_GUID=$(jq -r '.guid' Jellyfin.Plugin.SubtitleCat/meta.json)
+          MANIFEST_GUID=$(jq -r '.[0].guid' manifest.json)
+          if [ "$META_GUID" != "$MANIFEST_GUID" ]; then
+            echo "manifest.json guid '$MANIFEST_GUID' does not match meta.json guid '$META_GUID'." >&2
+            fail=1
+          fi
+
+          # manifest.json is written by the release job after the zip exists, so an entry
+          # for a brand new version is legitimately absent here. Only check it when it is
+          # already present, in which case it must point at this tag.
+          EXPECTED_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${META}/subtitlecat_${META}.zip"
+          ENTRY_URL=$(jq -r --arg v "$META" '(.[0].versions[] | select(.version==$v) | .sourceUrl) // ""' manifest.json)
+          if [ -n "$ENTRY_URL" ] && [ "$ENTRY_URL" != "$EXPECTED_URL" ]; then
+            echo "manifest.json entry for $META points at '$ENTRY_URL', expected '$EXPECTED_URL'." >&2
+            fail=1
+          fi
+
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+            if [ "$TAG" != "v$META" ]; then
+              echo "Tag '$TAG' does not match the version in meta.json ('$META'). Expected 'v$META'." >&2
+              fail=1
+            fi
+
+            # The release job builds main, so a tag that is not on main would ship code
+            # the tag does not point at.
+            git fetch --no-tags origin main
+            if ! git merge-base --is-ancestor "$GITHUB_SHA" "$(git rev-parse FETCH_HEAD)"; then
+              echo "Tag '$TAG' is not an ancestor of main, but the release is built from main." >&2
+              fail=1
+            fi
+          else
+            echo "Manual run, so there is no tag to compare. Checking the files only."
+          fi
+
+          if [ "$fail" -ne 0 ]; then
+            echo "Refusing to release: version metadata disagrees. Fix the files above, commit to main, then re-tag." >&2
+            exit 1
+          fi
+
+          echo "version=$META" >> "$GITHUB_OUTPUT"
+          echo "All version metadata agrees on $META."
+
+  release:
+    needs: version-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Read the version from meta.json
+        id: v
+        run: |
+          VERSION=$(jq -r '.version' Jellyfin.Plugin.SubtitleCat/meta.json)
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "meta.json version must be MAJOR.MINOR.PATCH, got '$VERSION'." >&2
+            exit 1
+          fi
+
+          # This job builds main while the gate inspected the tagged commit. If main has
+          # moved on to a different version since the tag was pushed, the two disagree and
+          # publishing would put main's newer code under the old tag's name. Stop instead,
+          # and let the newer version get its own tag.
+          GATED="${{ needs.version-gate.outputs.version }}"
+          if [ -n "$GATED" ] && [ "$GATED" != "$VERSION" ]; then
+            echo "main is at version '$VERSION' but the verified trigger is for '$GATED'. Tag the current main instead." >&2
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing v$VERSION"
+
+      - name: Test
+        run: dotnet test Jellyfin.Plugin.SubtitleCat.Tests/Jellyfin.Plugin.SubtitleCat.Tests.csproj -c Release
+
+      - name: Build
+        # The plugin csproj by path, never a solution, so test assemblies can never reach
+        # publish/ and from there into the zip.
+        run: |
+          dotnet publish Jellyfin.Plugin.SubtitleCat/Jellyfin.Plugin.SubtitleCat.csproj \
+            -c Release -f net9.0 --no-self-contained -o publish \
+            -p:Version=${{ steps.v.outputs.version }} \
+            -p:AssemblyVersion=${{ steps.v.outputs.version }} \
+            -p:FileVersion=${{ steps.v.outputs.version }}
+
+      - name: Package
+        id: pkg
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.v.outputs.version }}"
+          cp Jellyfin.Plugin.SubtitleCat/meta.json meta.json
+          # -j flattens paths so the zip is flat; Jellyfin extracts it verbatim into
+          # <plugins>/<name>_<version>/ and a nested folder would break it.
+          zip -j "subtitlecat_$VERSION.zip" publish/Jellyfin.Plugin.SubtitleCat.dll meta.json
+
+          # An exact allowlist rather than a blocklist of known-bad names. A blocklist
+          # only catches what it was told about, so a new transitive dependency appearing
+          # after a package bump would ship silently. This way, changing what is in the
+          # package requires editing this list.
+          EXPECTED=$'Jellyfin.Plugin.SubtitleCat.dll\nmeta.json'
+          ACTUAL=$(unzip -Z1 "subtitlecat_$VERSION.zip" | LC_ALL=C sort)
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::Package contents are not what this workflow expects." >&2
+            echo "--- expected ---" >&2; printf '%s\n' "$EXPECTED" >&2
+            echo "--- actual ---" >&2; printf '%s\n' "$ACTUAL" >&2
+            exit 1
+          fi
+
+          echo "md5=$(md5sum "subtitlecat_$VERSION.zip" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.v.outputs.version }}"
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "subtitlecat_$VERSION.zip" --clobber
+          else
+            gh release create "$TAG" "subtitlecat_$VERSION.zip" --target main --title "$TAG" --generate-notes --latest
+          fi
+
+      - name: Sync manifest.json to the built checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.v.outputs.version }}"
+          MD5="${{ steps.pkg.outputs.md5 }}"
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/subtitlecat_${VERSION}.zip"
+          TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # Preserve an existing changelog for this version if there is one.
+          CL="$(jq -r --arg v "$VERSION" '(.[0].versions[] | select(.version==$v) | .changelog) // "See the GitHub release notes."' manifest.json)"
+          # Upsert: drop any existing entry for this version, put the fresh one first.
+          jq --arg v "$VERSION" --arg sum "$MD5" --arg url "$URL" --arg ts "$TS" --arg cl "$CL" \
+            '.[0].versions |= ([{version:$v, changelog:$cl, targetAbi:"10.11.0.0", sourceUrl:$url, checksum:$sum, timestamp:$ts}] + map(select(.version != $v)))' \
+            manifest.json > manifest.tmp && mv manifest.tmp manifest.json
+
+          git add manifest.json
+          if git diff --cached --quiet; then
+            echo "manifest.json already up to date."
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email 'github-actions[bot]@users.noreply.github.com'
+            git commit -m "Sync manifest.json for v${VERSION} [skip ci]"
+            git push origin HEAD:main
+          fi

@@ -1,0 +1,77 @@
+name: Build
+
+# Compile and test checks for every push and pull request. release.yml also builds the
+# plugin, but only on tags, so without this nothing verifies that main compiles until
+# release time.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Per ref, so a second push to a branch cancels the first, but main and PRs never
+  # cancel each other.
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROJECT: Jellyfin.Plugin.SubtitleCat/Jellyfin.Plugin.SubtitleCat.csproj
+  TESTS: Jellyfin.Plugin.SubtitleCat.Tests/Jellyfin.Plugin.SubtitleCat.Tests.csproj
+  # Keep restore off whatever sources the runner image happens to have configured.
+  # NuGet.config in the repo root clears the source list and pins nuget.org.
+  NUGET_CONFIG: NuGet.config
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: |
+          dotnet restore "$PROJECT" --configfile "$NUGET_CONFIG"
+          dotnet restore "$TESTS" --configfile "$NUGET_CONFIG"
+
+      - name: Build
+        # --no-restore so this step fails on a compile error rather than quietly
+        # re-restoring with different sources than the step above.
+        run: dotnet build "$PROJECT" -c Release --no-restore
+
+      - name: Test
+        # The parsers are regexes over someone else's HTML, which is exactly the kind of
+        # code that needs fixtures. The tests run against pages saved from the live site.
+        run: dotnet test "$TESTS" -c Release --no-restore
+
+      - name: Verify formatting
+        # Run "dotnet format <project>" locally to fix. If a future SDK starts reporting
+        # new info-level suggestions on files nobody touched, add "--severity warn"
+        # rather than dropping the step.
+        run: |
+          dotnet format "$PROJECT" --verify-no-changes --no-restore
+          dotnet format "$TESTS" --verify-no-changes --no-restore
+
+      - name: Check dependencies for known vulnerabilities
+        # dotnet list package exits 0 whether or not it found anything, so the exit code
+        # cannot be the gate. Grep its report instead. Transitive packages are included
+        # because Jellyfin.Controller is the only direct reference and is where the real
+        # dependency surface comes from.
+        run: |
+          # Report goes to the runner temp dir, not the workspace, so nothing shows up as
+          # an untracked file when this is run locally.
+          REPORT="${RUNNER_TEMP:-.}/vulnerable.txt"
+          dotnet list "$PROJECT" package --vulnerable --include-transitive \
+            --configfile "$NUGET_CONFIG" > "$REPORT" 2>&1 || true
+          cat "$REPORT"
+          if grep -q 'has the following vulnerable packages' "$REPORT"; then
+            echo "::error::Vulnerable NuGet packages reported above." >&2
+            exit 1
+          fi
+          echo "No known-vulnerable packages reported."

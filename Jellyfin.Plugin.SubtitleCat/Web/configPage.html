@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SubtitleCat</title>
+    <style>
+        #SubtitleCatConfigPage .sc-section {
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid rgba(127, 127, 127, 0.18);
+        }
+
+        #SubtitleCatConfigPage .sc-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.75rem 1rem;
+        }
+
+        #SubtitleCatConfigPage .sc-field .fieldDescription {
+            margin-top: 0.25rem;
+        }
+
+        #SubtitleCatConfigPage .sc-status {
+            padding: 0.75em 1em;
+            border-radius: 0.3em;
+            border-left: 0.35em solid #666;
+            background: rgba(255, 255, 255, 0.06);
+            margin-bottom: 0.5em;
+        }
+
+        #SubtitleCatConfigPage .sc-status-ok {
+            border-left-color: #3aa655;
+        }
+
+        #SubtitleCatConfigPage .sc-status-warn {
+            border-left-color: #d8a13a;
+        }
+
+        #SubtitleCatConfigPage .sc-status-bad {
+            border-left-color: #cc3b3b;
+        }
+
+        #SubtitleCatConfigPage .sc-muted {
+            color: var(--theme-secondary-color, #666);
+        }
+
+        #SubtitleCatConfigPage .sc-inline {
+            display: flex;
+            gap: 0.5rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        #SubtitleCatConfigPage .sc-inline .inputContainer {
+            flex: 1 1 16rem;
+            margin-bottom: 0;
+        }
+    </style>
+</head>
+<body>
+<div id="SubtitleCatConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
+     data-require="emby-input,emby-button,emby-select,emby-checkbox">
+    <div data-role="content">
+        <div class="content-primary">
+            <form id="SubtitleCatConfigForm">
+                <div class="sc-section">
+                    <div class="sectionTitleContainer flex align-items-center">
+                        <h2 class="sectionTitle">SubtitleCat</h2>
+                    </div>
+                    <p class="fieldDescription">
+                        Finds subtitles on subtitlecat.com by matching the release name of your media file.
+                        Enable it per library under <strong>Dashboard &gt; Libraries &gt; (your library) &gt; Subtitle
+                        downloaders</strong>, otherwise it never gets asked for anything.
+                    </p>
+                </div>
+
+                <div class="sc-section">
+                    <h3 class="sectionTitle">Status</h3>
+                    <div id="HealthStatus" class="sc-status">Checking…</div>
+                    <div class="fieldDescription" id="HealthDetail"></div>
+
+                    <div class="sc-inline" style="margin-top: 0.75rem;">
+                        <div class="inputContainer">
+                            <input is="emby-input" type="text" id="TestQuery" label="Test search" />
+                        </div>
+                        <button is="emby-button" type="button" id="RunTestSearch" class="raised">
+                            <span>Search</span>
+                        </button>
+                        <button is="emby-button" type="button" id="ClearCache" class="raised">
+                            <span>Clear cache</span>
+                        </button>
+                    </div>
+                    <div class="fieldDescription" id="TestResult" style="margin-top: 0.5rem;"></div>
+                </div>
+
+                <div class="sc-section">
+                    <h3 class="sectionTitle">General</h3>
+                    <div class="sc-grid">
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="Enabled" />
+                                <span>Enable SubtitleCat</span>
+                            </label>
+                            <div class="fieldDescription">Turns the provider off without uninstalling it.</div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="IncludeMachineTranslated" />
+                                <span>Include machine-translated subtitles</span>
+                            </label>
+                            <div class="fieldDescription">
+                                subtitlecat generates almost everything except the original language by machine.
+                                Turning this off leaves very few results.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sc-section">
+                    <h3 class="sectionTitle">Matching</h3>
+                    <div class="sc-grid">
+                        <div class="checkboxContainer checkboxContainer-withDescription" style="grid-column: 1 / -1;">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="AllowResolutionMismatch" />
+                                <span>Accept a different resolution of the same release</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Subtitles are timed to the cut, not the resolution, so the same group's 1080p
+                                subtitle normally fits a 2160p file exactly. Leave this on.
+                            </div>
+                        </div>
+
+                        <div class="sc-field inputContainer">
+                            <input is="emby-input" type="number" id="MinimumMatchScore" label="Minimum match score" min="0" max="200" />
+                            <div class="fieldDescription">Higher is stricter. 40 is a title and year match.</div>
+                        </div>
+
+                        <div class="sc-field inputContainer">
+                            <input is="emby-input" type="number" id="MaxDetailPagesPerSearch" label="Detail pages per search" min="1" max="20" />
+                            <div class="fieldDescription">
+                                Whether a language exists varies per release entry, so checking more of them finds
+                                more. Each one is a request.
+                            </div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription" style="grid-column: 1 / -1;">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="EnableFallbackTitleSearch" />
+                                <span>Fall back to searching by title</span>
+                            </label>
+                            <div class="fieldDescription">
+                                When the release name finds nothing, retry with the title and year, or the series
+                                and episode number.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sc-section">
+                    <h3 class="sectionTitle">Networking</h3>
+                    <div class="sc-grid">
+                        <div class="sc-field inputContainer">
+                            <input is="emby-input" type="number" id="RequestDelayMs" label="Delay between requests (ms)" min="0" max="10000" />
+                            <div class="fieldDescription">One search can make several requests. Keep this polite.</div>
+                        </div>
+
+                        <div class="sc-field inputContainer">
+                            <input is="emby-input" type="number" id="RequestTimeoutSeconds" label="Request timeout (seconds)" min="5" max="120" />
+                        </div>
+
+                        <div class="sc-field inputContainer">
+                            <input is="emby-input" type="number" id="CacheMinutes" label="Cache pages for (minutes)" min="0" max="1440" />
+                        </div>
+
+                        <div class="sc-field inputContainer">
+                            <input is="emby-input" type="text" id="BaseUrl" label="Base URL" />
+                            <div class="fieldDescription">Only change this if subtitlecat moves domain.</div>
+                        </div>
+
+                        <div class="sc-field inputContainer" style="grid-column: 1 / -1;">
+                            <input is="emby-input" type="text" id="UserAgent" label="User-Agent" />
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <button is="emby-button" type="submit" class="raised button-submit block">
+                        <span>Save</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        (function () {
+            var SubtitleCatPluginId = '6d16c1a0-4868-4ddb-8d48-6fd5eb0ecac6';
+            var page;
+
+            function escapeHtml(value) {
+                return String(value == null ? '' : value)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+
+            function loadConfig() {
+                Dashboard.showLoadingMsg();
+                return ApiClient.getPluginConfiguration(SubtitleCatPluginId).then(function (cfg) {
+                    page.querySelector('#Enabled').checked = cfg.Enabled !== false;
+                    page.querySelector('#IncludeMachineTranslated').checked = cfg.IncludeMachineTranslated !== false;
+                    page.querySelector('#AllowResolutionMismatch').checked = cfg.AllowResolutionMismatch !== false;
+                    page.querySelector('#EnableFallbackTitleSearch').checked = cfg.EnableFallbackTitleSearch !== false;
+                    page.querySelector('#MinimumMatchScore').value = cfg.MinimumMatchScore != null ? cfg.MinimumMatchScore : 40;
+                    page.querySelector('#MaxDetailPagesPerSearch').value = cfg.MaxDetailPagesPerSearch || 8;
+                    page.querySelector('#RequestDelayMs').value = cfg.RequestDelayMs != null ? cfg.RequestDelayMs : 1200;
+                    page.querySelector('#RequestTimeoutSeconds').value = cfg.RequestTimeoutSeconds || 15;
+                    page.querySelector('#CacheMinutes').value = cfg.CacheMinutes != null ? cfg.CacheMinutes : 30;
+                    page.querySelector('#BaseUrl').value = cfg.BaseUrl || 'https://www.subtitlecat.com';
+                    page.querySelector('#UserAgent').value = cfg.UserAgent || '';
+                }).finally(function () {
+                    Dashboard.hideLoadingMsg();
+                });
+            }
+
+            function loadHealth() {
+                var box = page.querySelector('#HealthStatus');
+                var detail = page.querySelector('#HealthDetail');
+                return ApiClient.ajax({
+                    type: 'GET',
+                    url: ApiClient.getUrl('SubtitleCat/Admin/Health'),
+                    dataType: 'json'
+                }).then(function (health) {
+                    var cls = 'sc-status ';
+                    if (health.State === 'Healthy') {
+                        cls += 'sc-status-ok';
+                    } else if (health.State === 'Unknown') {
+                        cls += 'sc-status-warn';
+                    } else {
+                        cls += 'sc-status-bad';
+                    }
+
+                    box.className = cls;
+                    box.textContent = health.Summary || '';
+
+                    var bits = [];
+                    if (health.LastQuery) {
+                        bits.push('Last query: ' + health.LastQuery);
+                    }
+                    if (health.LastAttemptUtc) {
+                        bits.push('at ' + new Date(health.LastAttemptUtc).toLocaleString());
+                    }
+                    if (health.LastError) {
+                        bits.push('Error: ' + health.LastError);
+                    }
+                    detail.textContent = bits.join(' · ');
+                }, function () {
+                    box.className = 'sc-status sc-status-bad';
+                    box.textContent = 'Could not reach the SubtitleCat API. If you just installed or updated the plugin, restart Jellyfin.';
+                    detail.textContent = '';
+                });
+            }
+
+            function runTestSearch() {
+                var query = page.querySelector('#TestQuery').value.trim();
+                var result = page.querySelector('#TestResult');
+                if (!query) {
+                    result.textContent = 'Enter something to search for.';
+                    return;
+                }
+
+                result.textContent = 'Searching…';
+                ApiClient.ajax({
+                    type: 'POST',
+                    url: ApiClient.getUrl('SubtitleCat/Admin/TestSearch', { query: query }),
+                    dataType: 'json'
+                }).then(function (response) {
+                    var lines = ['Parsed ' + response.RowsParsed + ' result(s) in ' + response.ElapsedMs + ' ms.'];
+                    if (response.SampleNames && response.SampleNames.length) {
+                        lines.push('<ul style="margin:0.4rem 0 0 1rem;">' + response.SampleNames.map(function (n) {
+                            return '<li>' + escapeHtml(n) + '</li>';
+                        }).join('') + '</ul>');
+                    }
+                    result.innerHTML = lines.join('');
+                    return loadHealth();
+                }, function () {
+                    result.textContent = 'The test search failed. Check the status box above and the server log.';
+                    return loadHealth();
+                });
+            }
+
+            function save(e) {
+                e.preventDefault();
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(SubtitleCatPluginId).then(function (cfg) {
+                    cfg.Enabled = page.querySelector('#Enabled').checked;
+                    cfg.IncludeMachineTranslated = page.querySelector('#IncludeMachineTranslated').checked;
+                    cfg.AllowResolutionMismatch = page.querySelector('#AllowResolutionMismatch').checked;
+                    cfg.EnableFallbackTitleSearch = page.querySelector('#EnableFallbackTitleSearch').checked;
+                    cfg.MinimumMatchScore = parseInt(page.querySelector('#MinimumMatchScore').value, 10);
+                    if (isNaN(cfg.MinimumMatchScore)) { cfg.MinimumMatchScore = 40; }
+                    cfg.MaxDetailPagesPerSearch = parseInt(page.querySelector('#MaxDetailPagesPerSearch').value, 10) || 8;
+                    cfg.RequestDelayMs = parseInt(page.querySelector('#RequestDelayMs').value, 10);
+                    if (isNaN(cfg.RequestDelayMs)) { cfg.RequestDelayMs = 1200; }
+                    cfg.RequestTimeoutSeconds = parseInt(page.querySelector('#RequestTimeoutSeconds').value, 10) || 15;
+                    cfg.CacheMinutes = parseInt(page.querySelector('#CacheMinutes').value, 10);
+                    if (isNaN(cfg.CacheMinutes)) { cfg.CacheMinutes = 30; }
+                    cfg.BaseUrl = page.querySelector('#BaseUrl').value.trim() || 'https://www.subtitlecat.com';
+                    cfg.UserAgent = page.querySelector('#UserAgent').value.trim();
+
+                    ApiClient.updatePluginConfiguration(SubtitleCatPluginId, cfg).then(function (result) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                        return loadHealth();
+                    }).finally(function () {
+                        Dashboard.hideLoadingMsg();
+                    });
+                });
+                return false;
+            }
+
+            document.querySelector('#SubtitleCatConfigPage').addEventListener('pageshow', function () {
+                page = this;
+                loadConfig().then(loadHealth);
+            });
+
+            document.querySelector('#SubtitleCatConfigForm').addEventListener('submit', save);
+            document.querySelector('#RunTestSearch').addEventListener('click', runTestSearch);
+            document.querySelector('#ClearCache').addEventListener('click', function () {
+                ApiClient.ajax({
+                    type: 'POST',
+                    url: ApiClient.getUrl('SubtitleCat/Admin/ClearCache')
+                }).then(function () {
+                    page.querySelector('#TestResult').textContent = 'Cache cleared.';
+                });
+            });
+        })();
+    </script>
+</div>
+</body>
+</html>

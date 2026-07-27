@@ -1,0 +1,12 @@
+[
+  {
+    "guid": "6d16c1a0-4868-4ddb-8d48-6fd5eb0ecac6",
+    "name": "SubtitleCat",
+    "description": "Adds subtitlecat.com as a subtitle provider. Searches by the release name of your media file, falls back to title and year, and accepts a subtitle for a different resolution of the same release since the timings match anyway. Machine-translated results are labelled and ranked below native ones.",
+    "overview": "Subtitles from subtitlecat.com, matched on release name.",
+    "owner": "SurfHost",
+    "category": "Subtitles",
+    "imageUrl": "",
+    "versions": []
+  }
+]

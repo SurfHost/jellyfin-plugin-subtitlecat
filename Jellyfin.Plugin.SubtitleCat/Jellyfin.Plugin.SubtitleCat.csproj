@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Jellyfin.Plugin.SubtitleCat</RootNamespace>
+    <AssemblyName>Jellyfin.Plugin.SubtitleCat</AssemblyName>
+    <Version>0.1.0</Version>
+    <AssemblyVersion>0.1.0</AssemblyVersion>
+    <FileVersion>0.1.0</FileVersion>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Company>SurfHost</Company>
+    <Authors>SurfHost</Authors>
+    <Copyright>Copyright (C) 2026 SurfHost. Licensed under the GPL-3.0.</Copyright>
+    <!--
+      Never copy referenced Jellyfin/ASP.NET assemblies next to the plugin dll.
+      Jellyfin loads every dll it finds in the plugin folder into a separate
+      PluginLoadContext, so a private copy of these would give the framework
+      types a second identity and DI would silently fail to match them.
+    -->
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Jellyfin.Controller" Version="10.11.0">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Only the client assets ship inside the dll, never the .cs sources. -->
+    <EmbeddedResource Include="Web\**\*.html" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The test project reaches into internals rather than widening the public surface. -->
+    <InternalsVisibleTo Include="Jellyfin.Plugin.SubtitleCat.Tests" />
+  </ItemGroup>
+
+</Project>

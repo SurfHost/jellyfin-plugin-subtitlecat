@@ -1,0 +1,12 @@
+{
+  "guid": "6d16c1a0-4868-4ddb-8d48-6fd5eb0ecac6",
+  "name": "SubtitleCat",
+  "version": "0.1.0",
+  "targetAbi": "10.11.0.0",
+  "framework": "net9.0",
+  "owner": "SurfHost",
+  "overview": "Subtitles from subtitlecat.com, matched on release name.",
+  "description": "Adds subtitlecat.com as a subtitle provider. Searches by the release name of your media file, falls back to title and year, and accepts a subtitle for a different resolution of the same release since the timings match anyway. Machine-translated results are labelled and ranked below native ones.",
+  "category": "Subtitles",
+  "timestamp": "2026-07-28T00:00:00.0000000Z"
+}
