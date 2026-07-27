@@ -134,6 +134,24 @@ internal sealed class ReleaseName
         "complete", "season", "series"
     };
 
+    /// <summary>
+    /// The subset of <see cref="MetadataTokens"/> that is also a plausible word in a
+    /// title, and so only ends the title once some of the title has been read.
+    /// </summary>
+    /// <remarks>
+    /// "Dual Survival", "Vision Quest" and "2 Broke Girls" all begin with a word that is
+    /// elsewhere a technical tag. Treating those as an immediate boundary left the title
+    /// empty, and an empty title cannot be compared, which silently removed the only
+    /// check that a candidate is even the same programme. A release name always starts
+    /// with its title, so a word in this set is only a boundary after the title has begun.
+    /// </remarks>
+    private static readonly HashSet<string> SoftMetadataTokens = new(StringComparer.Ordinal)
+    {
+        "dv", "dolby", "vision", "dd", "hd", "ma",
+        "5", "1", "7", "2", "0",
+        "multi", "dual", "audio", "subs", "complete", "season", "series"
+    };
+
     /// <summary>Words too common to count as evidence that two titles are the same.</summary>
     private static readonly HashSet<string> TitleStopWords = new(StringComparer.Ordinal)
     {
@@ -205,8 +223,24 @@ internal sealed class ReleaseName
     /// <summary>
     /// Gets the title tokens worth comparing, dropping stop words and single characters.
     /// </summary>
-    public IReadOnlyList<string> SignificantTitleTokens =>
-        TitleTokens.Where(t => t.Length > 1 && !TitleStopWords.Contains(t)).ToList();
+    /// <remarks>
+    /// Falls back to the unfiltered tokens when that filter would leave nothing. The
+    /// filter exists to drop noise from a title that has other words to go on, not to
+    /// erase the title: "S.W.A.T." is four single letters and "The A-Team" is a stop
+    /// word plus two, and for those the weak tokens are all the evidence there is.
+    /// Returning an empty list instead would leave the caller with no title to check.
+    /// </remarks>
+    public IReadOnlyList<string> SignificantTitleTokens
+    {
+        get
+        {
+            var filtered = TitleTokens
+                .Where(t => t.Length > 1 && !TitleStopWords.Contains(t))
+                .ToList();
+
+            return filtered.Count > 0 ? filtered : TitleTokens;
+        }
+    }
 
     /// <summary>Parses a release name. Never throws; an unparseable name yields empty features.</summary>
     public static ReleaseName Parse(string? value)
@@ -366,13 +400,26 @@ internal sealed class ReleaseName
         var title = new List<string>();
         foreach (var token in tokens)
         {
+            var isSoft = SoftMetadataTokens.Contains(token);
+
+            // A hard boundary is a token that cannot be part of a title under any
+            // reading: a resolution, a source, a codec, an edition, an episode code, a
+            // year, or a purely technical tag.
             if (Resolutions.ContainsKey(token)
                 || Sources.ContainsKey(token)
                 || Codecs.ContainsKey(token)
                 || Editions.Contains(token)
-                || MetadataTokens.Contains(token)
+                || (MetadataTokens.Contains(token) && !isSoft)
                 || EpisodeRegex.IsMatch(token)
                 || (token.Length == 4 && YearRegex.IsMatch(token)))
+            {
+                break;
+            }
+
+            // A soft boundary ends the title, but only once there is a title to end.
+            // Release names lead with the title, so a leading "Dual" or "2" is part of
+            // the name rather than a tag.
+            if (isSoft && title.Count > 0)
             {
                 break;
             }

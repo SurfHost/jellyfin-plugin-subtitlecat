@@ -134,6 +134,20 @@ public sealed class SubtitleCatDownloader : ISubtitleProvider, IHasOrder
         var rawReleaseName = GetReleaseBasename(request.MediaPath);
         var local = ReleaseName.Parse(rawReleaseName ?? BuildNameFromMetadata(request));
 
+        // A filename can be all metadata and no title, "S05E12.mkv" being the plain
+        // case. Without a title there is nothing to check a candidate against, and the
+        // matcher refuses rather than guess. Jellyfin always knows the name, so prepend
+        // it and reparse, which keeps the group and resolution from the filename while
+        // giving the title gate something to work with.
+        if (local.SignificantTitleTokens.Count == 0 && rawReleaseName is not null)
+        {
+            var known = BuildNameFromMetadata(request);
+            if (!string.IsNullOrWhiteSpace(known))
+            {
+                local = ReleaseName.Parse(known + "." + rawReleaseName);
+            }
+        }
+
         var queries = SearchQueryBuilder.Build(
             local,
             rawReleaseName,

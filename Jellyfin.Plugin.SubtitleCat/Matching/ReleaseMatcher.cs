@@ -137,9 +137,14 @@ internal static class ReleaseMatcher
         var localTitle = local.SignificantTitleTokens;
         if (localTitle.Count == 0)
         {
-            // Nothing to compare on. Let the other signals decide rather than rejecting,
-            // which is what happens for a file named only by episode code.
-            return local.IsEpisode ? 1d : 0d;
+            // No title to compare, so refuse. This used to report a perfect match for
+            // episodes, on the reasoning that the episode number would carry the
+            // decision. It does not: the episode number is the same for every series
+            // ever made, so any S05E12 matched any other, and the wrong programme's
+            // subtitle was offered and downloaded. Callers seed the title from the
+            // Jellyfin request precisely so this case does not arise; if it still does,
+            // returning nothing is the only safe answer.
+            return 0d;
         }
 
         var candidateTokens = new HashSet<string>(candidate.Tokens, StringComparer.Ordinal);
