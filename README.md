@@ -39,6 +39,41 @@ Because nearly everything on the site other than the original language is genera
 labelled **(machine translated from English)** and ranked below any genuinely native subtitle. They are still offered,
 because for most titles they are the only thing there.
 
+## Translating on the fly
+
+When your language has never been generated for a title, the plugin can fetch the original subtitle and translate it
+itself. Those results appear as **(translate now with ...)**, ranked below anything that already exists.
+
+The work happens when you pick the result, not while searching. A film is roughly two thousand cues, so translating
+every candidate during a search would make the dialog unusable and burn a metered quota on results nobody chose.
+Expect a minute or two per film once you click.
+
+Pick a backend in the plugin settings:
+
+| Backend | Setup | Notes |
+| --- | --- | --- |
+| **LibreTranslate** | A container on your own network | Free, unlimited, private, no key. Quality is roughly what subtitlecat itself produces. |
+| **Google Translate** | None | The same endpoint subtitlecat's own button calls. Free and keyless, but undocumented, and the rate limit lands on your home address rather than each visitor's. |
+| **DeepL** | An API key | Best Dutch by a clear margin. The free tier is 500k characters a month, about six films, then it stops until the month turns over. |
+
+Since what subtitlecat stores is Google output, a fresh translation from a better backend is often an improvement on
+it. That is why **Also offer a fresh translation when the site already has one** is on by default: you get both entries
+and can pick.
+
+### What protects the timings
+
+Only cue text is ever sent to a translation service. Cue numbers and timestamps are parsed out first, held locally, and
+written back afterwards, so a backend that reflows or reorders what it is given can spoil the wording but cannot
+desynchronise the subtitle from the video.
+
+Two invariants back that up. A batch's reply must contain exactly as many lines as were sent, and the finished list
+must contain exactly as many lines as there are cues. Either mismatch would shift every later line onto the wrong
+timing, so both are checked rather than assumed; a mismatched batch is resent one line at a time instead of being
+guessed at. Inline formatting is stripped before sending and restored after, because a tag sent through a translator
+comes back moved or split mid-word.
+
+If a translation fails partway, you get an error rather than a half-English file quietly labelled Dutch.
+
 ## Installing
 
 Add this repository under **Dashboard > Plugins > Repositories**:

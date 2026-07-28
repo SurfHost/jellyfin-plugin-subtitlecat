@@ -38,6 +38,16 @@ internal static class DetailPageParser
         RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled,
         MatchTimeout);
 
+    /// <summary>
+    /// The Translate button's click handler, whose three arguments are the target
+    /// language, the original subtitle's file name, and the folder it sits in. Those are
+    /// the only place the original's address appears on the page.
+    /// </summary>
+    private static readonly Regex TranslateCallRegex = new(
+        @"translate_from_server_folder\(\s*'(?<code>[^']*)'\s*,\s*'(?<file>[^']*)'\s*,\s*'(?<folder>[^']*)'\s*\)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled,
+        MatchTimeout);
+
     private static readonly Regex FlagRegex = new(
         """<img[^>]*\salt="(?<code>[^"]*)"[^>]*>""",
         RegexOptions.IgnoreCase | RegexOptions.Compiled,
@@ -66,36 +76,62 @@ internal static class DetailPageParser
                 var body = block.Groups["body"].Value;
 
                 var download = DownloadRegex.Match(body);
-                if (!download.Success)
+                if (download.Success)
                 {
-                    // A translate-only language. Nothing to fetch.
+                    var href = WebUtility.HtmlDecode(download.Groups["href"].Value).Trim();
+                    if (href.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    // The anchor id is authoritative for the code; the flag image is the
+                    // fallback, since the two have disagreed on regional variants before.
+                    var code = download.Groups["code"].Value.Trim();
+                    if (code.Length == 0)
+                    {
+                        code = FlagRegex.Match(body).Groups["code"].Value.Trim();
+                    }
+
+                    if (code.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    links.Add(new SubtitleCatDownloadLink
+                    {
+                        LanguageCode = code,
+                        LanguageName = ExtractLanguageName(body, code),
+                        Href = href,
+                        Kind = SubtitleCatLinkKind.Stored
+                    });
+
                     continue;
                 }
 
-                var href = WebUtility.HtmlDecode(download.Groups["href"].Value).Trim();
-                if (href.Length == 0)
+                // No stored file, so the block offers a Translate button instead. Its
+                // arguments name the original subtitle, which is the same file for every
+                // language on the page: only the target differs.
+                var translate = TranslateCallRegex.Match(body);
+                if (!translate.Success)
                 {
                     continue;
                 }
 
-                // The anchor id is authoritative for the code; the flag image is the
-                // fallback, since the two have disagreed on regional variants before.
-                var code = download.Groups["code"].Value.Trim();
-                if (code.Length == 0)
-                {
-                    code = FlagRegex.Match(body).Groups["code"].Value.Trim();
-                }
+                var targetCode = translate.Groups["code"].Value.Trim();
+                var originalFile = translate.Groups["file"].Value.Trim();
+                var folder = translate.Groups["folder"].Value.Trim();
 
-                if (code.Length == 0)
+                if (targetCode.Length == 0 || originalFile.Length == 0 || folder.Length == 0)
                 {
                     continue;
                 }
 
                 links.Add(new SubtitleCatDownloadLink
                 {
-                    LanguageCode = code,
-                    LanguageName = ExtractLanguageName(body, code),
-                    Href = href
+                    LanguageCode = targetCode,
+                    LanguageName = ExtractLanguageName(body, targetCode),
+                    Href = string.Concat(folder.TrimEnd('/'), "/", originalFile),
+                    Kind = SubtitleCatLinkKind.Translatable
                 });
             }
         }

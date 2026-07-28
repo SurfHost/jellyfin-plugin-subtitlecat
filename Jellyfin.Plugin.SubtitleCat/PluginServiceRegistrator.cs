@@ -4,6 +4,7 @@ using System.Net.Http;
 using Jellyfin.Plugin.SubtitleCat.Models;
 using Jellyfin.Plugin.SubtitleCat.Providers;
 using Jellyfin.Plugin.SubtitleCat.Scraping;
+using Jellyfin.Plugin.SubtitleCat.Translation;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Controller.Subtitles;
@@ -30,6 +31,14 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<ScrapeHealth>();
         serviceCollection.AddSingleton<SubtitleCatClient>();
 
+        // Every backend is registered and the configured one is picked per call, so
+        // changing the setting takes effect without a restart.
+        serviceCollection.AddSingleton<ISubtitleTranslator, LibreTranslateTranslator>();
+        serviceCollection.AddSingleton<ISubtitleTranslator, GoogleTranslateTranslator>();
+        serviceCollection.AddSingleton<ISubtitleTranslator, DeepLTranslator>();
+        serviceCollection.AddSingleton<TranslatorRegistry>();
+        serviceCollection.AddSingleton<SubtitleTranslationService>();
+
         // The registration Jellyfin actually consumes. Everything above is only
         // reachable through it.
         serviceCollection.AddSingleton<ISubtitleProvider, SubtitleCatDownloader>();
@@ -42,5 +51,21 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
                 AutomaticDecompression = DecompressionMethods.All,
                 PooledConnectionLifetime = TimeSpan.FromMinutes(2)
             });
+
+        foreach (var name in new[]
+        {
+            LibreTranslateTranslator.ClientName,
+            GoogleTranslateTranslator.ClientName,
+            DeepLTranslator.ClientName
+        })
+        {
+            serviceCollection
+                .AddHttpClient(name)
+                .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+                {
+                    AutomaticDecompression = DecompressionMethods.All,
+                    PooledConnectionLifetime = TimeSpan.FromMinutes(2)
+                });
+        }
     }
 }

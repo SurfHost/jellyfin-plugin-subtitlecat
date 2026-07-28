@@ -1,3 +1,4 @@
+using Jellyfin.Plugin.SubtitleCat.Translation;
 using MediaBrowser.Model.Plugins;
 
 namespace Jellyfin.Plugin.SubtitleCat.Configuration;
@@ -73,4 +74,45 @@ public class PluginConfiguration : BasePluginConfiguration
     /// release name retries with the title and year (or series and episode number).
     /// </summary>
     public bool EnableFallbackTitleSearch { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets which translation service to use for languages subtitlecat has not
+    /// generated. <see cref="TranslatorKind.None"/> keeps the plugin to stored subtitles only.
+    /// </summary>
+    public TranslatorKind TranslationBackend { get; set; } = TranslatorKind.None;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether a fresh translation is offered even when
+    /// subtitlecat already has one.
+    /// </summary>
+    /// <remarks>
+    /// Worth leaving on when the configured backend is better than the machine
+    /// translation subtitlecat itself produced, which is the usual reason to set one up.
+    /// The entry costs nothing until it is actually chosen.
+    /// </remarks>
+    public bool OfferTranslationAlongsideStored { get; set; } = true;
+
+    /// <summary>Gets or sets the base address of the LibreTranslate instance.</summary>
+    public string LibreTranslateUrl { get; set; } = "http://localhost:5000";
+
+    /// <summary>Gets or sets the LibreTranslate API key. Empty is normal when self-hosting.</summary>
+    public string LibreTranslateApiKey { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the DeepL API key. A free-tier key ends in ":fx".</summary>
+    public string DeepLApiKey { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets how many cues go out per request. Larger batches are faster and
+    /// cheaper, but a backend that mishandles one costs more work to recover from.
+    /// </summary>
+    public int TranslationBatchSize { get; set; } = 40;
+
+    /// <summary>Gets or sets the minimum gap between translation requests, in milliseconds.</summary>
+    public int TranslationRequestDelayMs { get; set; } = 250;
+
+    /// <summary>
+    /// Gets or sets the overall time limit for translating one file, in seconds. A film
+    /// runs to roughly two thousand cues, so this is minutes rather than seconds.
+    /// </summary>
+    public int TranslationTimeoutSeconds { get; set; } = 300;
 }

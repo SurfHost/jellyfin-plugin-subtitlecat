@@ -140,19 +140,34 @@ public class ReleaseMatcherTests
     }
 
     [Fact]
-    public void NativeResultsAreRankedAboveMachineTranslatedOnes()
+    public void ResultsAreGroupedByTierBeforeScore()
     {
         var items = new[]
         {
-            new { Machine = true, Score = 500, Languages = 40 },
-            new { Machine = false, Score = 50, Languages = 2 }
+            new { Label = "translate", Tier = ReleaseMatcher.ResultTier.TranslateOnDownload, Score = 900, Languages = 90 },
+            new { Label = "stored-machine", Tier = ReleaseMatcher.ResultTier.StoredMachineTranslation, Score = 500, Languages = 40 },
+            new { Label = "native", Tier = ReleaseMatcher.ResultTier.Native, Score = 50, Languages = 2 }
         };
 
-        var ranked = ReleaseMatcher.Rank(items, i => i.Machine, i => i.Score, i => i.Languages).ToList();
+        var ranked = ReleaseMatcher.Rank(items, i => i.Tier, i => i.Score, i => i.Languages).ToList();
 
-        // Ordering is grouped, not weighted, so a high-scoring machine translation can
-        // never displace a native subtitle no matter how good its release match is.
-        Assert.False(ranked[0].Machine);
-        Assert.True(ranked[1].Machine);
+        // Grouped, not weighted, so no amount of release-match score lets a machine
+        // translation displace a native subtitle, or lets something that still has to be
+        // translated displace something that already exists.
+        Assert.Equal(new[] { "native", "stored-machine", "translate" }, ranked.Select(r => r.Label).ToArray());
+    }
+
+    [Fact]
+    public void WithinATierTheBetterReleaseMatchWins()
+    {
+        var items = new[]
+        {
+            new { Label = "worse", Tier = ReleaseMatcher.ResultTier.Native, Score = 60, Languages = 90 },
+            new { Label = "better", Tier = ReleaseMatcher.ResultTier.Native, Score = 130, Languages = 2 }
+        };
+
+        var ranked = ReleaseMatcher.Rank(items, i => i.Tier, i => i.Score, i => i.Languages).ToList();
+
+        Assert.Equal("better", ranked[0].Label);
     }
 }

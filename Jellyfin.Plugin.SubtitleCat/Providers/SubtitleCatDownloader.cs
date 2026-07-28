@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Jellyfin.Plugin.SubtitleCat.Matching;
 using Jellyfin.Plugin.SubtitleCat.Models;
 using Jellyfin.Plugin.SubtitleCat.Scraping;
+using Jellyfin.Plugin.SubtitleCat.Translation;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Subtitles;
 using MediaBrowser.Model.Providers;
@@ -22,12 +23,20 @@ namespace Jellyfin.Plugin.SubtitleCat.Providers;
 public sealed class SubtitleCatDownloader : ISubtitleProvider, IHasOrder
 {
     private readonly SubtitleCatClient _client;
+    private readonly TranslatorRegistry _translators;
+    private readonly SubtitleTranslationService _translation;
     private readonly ILogger<SubtitleCatDownloader> _logger;
 
     /// <summary>Initializes a new instance of the <see cref="SubtitleCatDownloader"/> class.</summary>
-    public SubtitleCatDownloader(SubtitleCatClient client, ILogger<SubtitleCatDownloader> logger)
+    public SubtitleCatDownloader(
+        SubtitleCatClient client,
+        TranslatorRegistry translators,
+        SubtitleTranslationService translation,
+        ILogger<SubtitleCatDownloader> logger)
     {
         _client = client;
+        _translators = translators;
+        _translation = translation;
         _logger = logger;
     }
 
@@ -108,6 +117,11 @@ public sealed class SubtitleCatDownloader : ISubtitleProvider, IHasOrder
             _logger.LogDebug("SubtitleCat: subtitle decoded as {Encoding}.", encodingUsed);
         }
 
+        if (decoded.Kind == SubtitleCatIdKind.Translate)
+        {
+            text = await TranslateAsync(decoded, text, cancellationToken).ConfigureAwait(false);
+        }
+
         return new SubtitleResponse
         {
             Format = "srt",
@@ -116,6 +130,61 @@ public sealed class SubtitleCatDownloader : ISubtitleProvider, IHasOrder
             IsHearingImpaired = decoded.HearingImpaired,
             Stream = new MemoryStream(new UTF8Encoding(false).GetBytes(text))
         };
+    }
+
+    /// <summary>
+    /// Translates a downloaded original into the requested language.
+    /// </summary>
+    /// <remarks>
+    /// Runs here rather than during the search on purpose. A film is around two thousand
+    /// cues, so translating every candidate at search time would make the dialog unusable
+    /// and burn a metered quota on results nobody picked. The cost is paid only by the
+    /// one result actually chosen.
+    /// </remarks>
+    private async Task<string> TranslateAsync(
+        SubtitleCatId id,
+        string original,
+        CancellationToken cancellationToken)
+    {
+        var translator = _translators.Active;
+        if (translator is null)
+        {
+            throw new InvalidOperationException(
+                _translators.DescribeUnavailable()
+                ?? "No translation backend is configured, so this subtitle cannot be produced.");
+        }
+
+        var target = id.TargetLanguage;
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            throw new InvalidOperationException("The subtitle identifier carries no target language.");
+        }
+
+        var config = Plugin.Config;
+
+        // Bounded separately from the HTTP timeouts: the individual requests are quick,
+        // but there are dozens of them and a stuck run would otherwise hang the download
+        // until Jellyfin gave up on its own.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(config.TranslationTimeoutSeconds, 30, 1800)));
+
+        try
+        {
+            return await _translation.TranslateAsync(
+                original,
+                translator,
+                id.SourceLanguage,
+                target,
+                config.TranslationBatchSize,
+                timeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new InvalidOperationException(string.Format(
+                CultureInfo.InvariantCulture,
+                "Translation ran past the {0} second limit and was stopped. Raise the limit, lower the batch size, or try a faster backend.",
+                config.TranslationTimeoutSeconds));
+        }
     }
 
     private async Task<IEnumerable<RemoteSubtitleInfo>> SearchInternalAsync(
@@ -171,6 +240,7 @@ public sealed class SubtitleCatDownloader : ISubtitleProvider, IHasOrder
             return Array.Empty<RemoteSubtitleInfo>();
         }
 
+        var translationOffered = _translators.IsAvailable;
         var results = new List<ScoredResult>();
         var linksFound = 0;
         var pagesRead = 0;
@@ -186,26 +256,60 @@ public sealed class SubtitleCatDownloader : ISubtitleProvider, IHasOrder
             pagesRead++;
             linksFound += links.Count;
 
-            foreach (var link in links)
+            // subtitlecat generates everything but the original by machine, so a subtitle
+            // counts as native only when the entry was authored in the language asked for.
+            var sourceLanguage = LanguageCodes.FromEnglishName(candidate.Row.SourceLanguageName);
+            var wantedIsTheOriginal = sourceLanguage is not null
+                && string.Equals(sourceLanguage, wantedLanguage, StringComparison.Ordinal);
+
+            var matching = links
+                .Where(link => LanguageCodes.Matches(link.LanguageCode, wantedLanguage, out _))
+                .ToList();
+
+            var hasStored = matching.Any(link => link.Kind == SubtitleCatLinkKind.Stored);
+
+            foreach (var link in matching)
             {
-                if (!LanguageCodes.Matches(link.LanguageCode, wantedLanguage, out var isExact))
+                LanguageCodes.Matches(link.LanguageCode, wantedLanguage, out var isExact);
+
+                if (link.Kind == SubtitleCatLinkKind.Stored)
+                {
+                    if (!wantedIsTheOriginal && !config.IncludeMachineTranslated)
+                    {
+                        continue;
+                    }
+
+                    results.Add(new ScoredResult(
+                        candidate.Row,
+                        candidate.Score,
+                        link,
+                        wantedIsTheOriginal ? ReleaseMatcher.ResultTier.Native : ReleaseMatcher.ResultTier.StoredMachineTranslation,
+                        isExact,
+                        null));
+
+                    continue;
+                }
+
+                if (!translationOffered)
                 {
                     continue;
                 }
 
-                // subtitlecat generates everything but the original by machine, so a
-                // subtitle counts as native only when the entry was authored in the
-                // language being asked for.
-                var sourceLanguage = LanguageCodes.FromEnglishName(candidate.Row.SourceLanguageName);
-                var machineTranslated = sourceLanguage is null
-                    || !string.Equals(sourceLanguage, wantedLanguage, StringComparison.Ordinal);
-
-                if (machineTranslated && !config.IncludeMachineTranslated)
+                // Translating the original into its own language is pointless, and
+                // offering a second copy of something already stored is only useful when
+                // the configured backend is expected to beat what subtitlecat produced.
+                if (wantedIsTheOriginal || (hasStored && !config.OfferTranslationAlongsideStored))
                 {
                     continue;
                 }
 
-                results.Add(new ScoredResult(candidate.Row, candidate.Score, link, machineTranslated, isExact));
+                results.Add(new ScoredResult(
+                    candidate.Row,
+                    candidate.Score,
+                    link,
+                    ReleaseMatcher.ResultTier.TranslateOnDownload,
+                    isExact,
+                    sourceLanguage));
             }
         }
 
@@ -223,10 +327,10 @@ public sealed class SubtitleCatDownloader : ISubtitleProvider, IHasOrder
         return ReleaseMatcher
             .Rank(
                 results,
-                r => r.MachineTranslated,
+                r => r.Tier,
                 r => r.Score + (r.IsExactLanguage ? 0 : -5),
                 r => r.Row.LanguageCount)
-            .Select(r => ToRemoteSubtitleInfo(r, request))
+            .Select(r => ToRemoteSubtitleInfo(r, request, wantedLanguage))
             .ToList();
     }
 
@@ -278,8 +382,12 @@ public sealed class SubtitleCatDownloader : ISubtitleProvider, IHasOrder
             .ToList();
     }
 
-    private RemoteSubtitleInfo ToRemoteSubtitleInfo(ScoredResult result, SubtitleSearchRequest request)
+    private RemoteSubtitleInfo ToRemoteSubtitleInfo(
+        ScoredResult result,
+        SubtitleSearchRequest request,
+        string wantedLanguage)
     {
+        var isTranslateOnDownload = result.Tier == ReleaseMatcher.ResultTier.TranslateOnDownload;
         var name = result.Row.Name;
         var comment = string.Format(
             CultureInfo.InvariantCulture,
@@ -288,29 +396,55 @@ public sealed class SubtitleCatDownloader : ISubtitleProvider, IHasOrder
             result.Row.LanguageCount,
             result.Row.LanguageCount == 1 ? string.Empty : "s");
 
-        if (result.MachineTranslated)
+        switch (result.Tier)
         {
-            var from = result.Row.SourceLanguageName;
-            var note = from is null
-                ? "machine translated"
-                : string.Format(CultureInfo.InvariantCulture, "machine translated from {0}", from);
+            case ReleaseMatcher.ResultTier.StoredMachineTranslation:
+                var from = result.Row.SourceLanguageName;
+                name = string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0} ({1})",
+                    name,
+                    from is null
+                        ? "machine translated"
+                        : string.Format(CultureInfo.InvariantCulture, "machine translated from {0}", from));
+                comment = string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0} Generated by subtitlecat's automatic translation, not written by a person.",
+                    comment);
+                break;
 
-            name = string.Format(CultureInfo.InvariantCulture, "{0} ({1})", name, note);
-            comment = string.Format(
-                CultureInfo.InvariantCulture,
-                "{0} Generated by subtitlecat's automatic translation, not written by a person.",
-                comment);
+            case ReleaseMatcher.ResultTier.TranslateOnDownload:
+                // Named so it is obvious in the list that picking this does work rather
+                // than fetching something that already exists, because it is slow.
+                name = string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0} (translate now with {1})",
+                    name,
+                    _translators.ActiveName);
+                comment = string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0} No {1} subtitle exists for this release yet. Choosing this downloads the {2} original and translates it here, which takes a minute or two for a film.",
+                    comment,
+                    wantedLanguage,
+                    result.SourceLanguage ?? "original");
+                break;
+
+            default:
+                break;
         }
 
         var id = new SubtitleCatId
         {
+            Kind = isTranslateOnDownload ? SubtitleCatIdKind.Translate : SubtitleCatIdKind.Stored,
             Href = result.Link.Href,
 
             // Echoed rather than normalised, because Jellyfin names the saved file from
             // it and the server's own configuration decides whether that is dut or nld.
             Language = string.IsNullOrWhiteSpace(request.Language)
                 ? result.Link.LanguageCode
-                : request.Language
+                : request.Language,
+            TargetLanguage = isTranslateOnDownload ? wantedLanguage : null,
+            SourceLanguage = isTranslateOnDownload ? result.SourceLanguage : null
         };
 
         return new RemoteSubtitleInfo
@@ -322,7 +456,7 @@ public sealed class SubtitleCatDownloader : ISubtitleProvider, IHasOrder
             ThreeLetterISOLanguageName = id.Language,
             Comment = comment,
             DownloadCount = result.Row.DownloadCount,
-            MachineTranslated = result.MachineTranslated,
+            MachineTranslated = result.Tier != ReleaseMatcher.ResultTier.Native,
             AiTranslated = false,
             IsHashMatch = false
         };
@@ -383,6 +517,7 @@ public sealed class SubtitleCatDownloader : ISubtitleProvider, IHasOrder
         SubtitleCatSearchRow Row,
         int Score,
         SubtitleCatDownloadLink Link,
-        bool MachineTranslated,
-        bool IsExactLanguage);
+        int Tier,
+        bool IsExactLanguage,
+        string? SourceLanguage);
 }

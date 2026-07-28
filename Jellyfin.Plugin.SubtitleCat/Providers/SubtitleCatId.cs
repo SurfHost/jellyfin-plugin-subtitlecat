@@ -3,6 +3,16 @@ using System.Text;
 
 namespace Jellyfin.Plugin.SubtitleCat.Providers;
 
+/// <summary>What has to happen to the file behind a subtitle identifier.</summary>
+internal enum SubtitleCatIdKind
+{
+    /// <summary>Download it and serve it as-is.</summary>
+    Stored = 0,
+
+    /// <summary>Download the original and translate it before serving.</summary>
+    Translate = 1
+}
+
 /// <summary>
 /// The opaque identifier handed to Jellyfin with each search result and handed back on download.
 /// </summary>
@@ -20,9 +30,13 @@ namespace Jellyfin.Plugin.SubtitleCat.Providers;
 /// </remarks>
 internal sealed class SubtitleCatId
 {
-    private const string Prefix = "sc1";
+    private const string Prefix = "sc2";
+    private const string NotSet = "-";
 
-    /// <summary>Gets the download path, exactly as it was read from the page.</summary>
+    /// <summary>Gets whether the file needs translating after it is fetched.</summary>
+    public required SubtitleCatIdKind Kind { get; init; }
+
+    /// <summary>Gets the path to fetch, exactly as it was read from the page.</summary>
     public required string Href { get; init; }
 
     /// <summary>
@@ -35,6 +49,18 @@ internal sealed class SubtitleCatId
     /// language is already present.
     /// </remarks>
     public required string Language { get; init; }
+
+    /// <summary>
+    /// Gets the two-letter target language for the translator, which is not always
+    /// derivable from <see cref="Language"/> without a lookup.
+    /// </summary>
+    public string? TargetLanguage { get; init; }
+
+    /// <summary>
+    /// Gets the two-letter source language of the original, or null to let the
+    /// translator detect it.
+    /// </summary>
+    public string? SourceLanguage { get; init; }
 
     /// <summary>Gets a value indicating whether the subtitle is flagged hearing impaired.</summary>
     public bool HearingImpaired { get; init; }
@@ -52,11 +78,15 @@ internal sealed class SubtitleCatId
     public string Encode()
     {
         var flags = string.Concat(HearingImpaired ? "h" : string.Empty, Forced ? "f" : string.Empty);
+
         return string.Join(
             '.',
             Prefix,
+            Kind == SubtitleCatIdKind.Translate ? "t" : "d",
             Language,
             flags.Length == 0 ? "n" : flags,
+            Sanitize(TargetLanguage),
+            Sanitize(SourceLanguage),
             Base64UrlEncode(Encoding.UTF8.GetBytes(Href)));
     }
 
@@ -77,7 +107,7 @@ internal sealed class SubtitleCatId
         }
 
         var parts = value.Split('.');
-        if (parts.Length != 4)
+        if (parts.Length != 7)
         {
             error = "The subtitle identifier is not in the expected format.";
             return false;
@@ -91,7 +121,7 @@ internal sealed class SubtitleCatId
             return false;
         }
 
-        if (parts[1].Length == 0)
+        if (parts[2].Length == 0)
         {
             error = "The subtitle identifier carries no language.";
             return false;
@@ -100,7 +130,7 @@ internal sealed class SubtitleCatId
         string href;
         try
         {
-            href = Encoding.UTF8.GetString(Base64UrlDecode(parts[3]));
+            href = Encoding.UTF8.GetString(Base64UrlDecode(parts[6]));
         }
         catch (FormatException)
         {
@@ -116,14 +146,25 @@ internal sealed class SubtitleCatId
 
         id = new SubtitleCatId
         {
-            Href = href,
-            Language = parts[1],
-            HearingImpaired = parts[2].Contains('h', StringComparison.Ordinal),
-            Forced = parts[2].Contains('f', StringComparison.Ordinal)
+            Kind = string.Equals(parts[1], "t", StringComparison.Ordinal)
+                ? SubtitleCatIdKind.Translate
+                : SubtitleCatIdKind.Stored,
+            Language = parts[2],
+            HearingImpaired = parts[3].Contains('h', StringComparison.Ordinal),
+            Forced = parts[3].Contains('f', StringComparison.Ordinal),
+            TargetLanguage = Desanitize(parts[4]),
+            SourceLanguage = Desanitize(parts[5]),
+            Href = href
         };
 
         return true;
     }
+
+    private static string Sanitize(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? NotSet : value.Replace('.', '-');
+
+    private static string? Desanitize(string value) =>
+        string.Equals(value, NotSet, StringComparison.Ordinal) ? null : value;
 
     private static string Base64UrlEncode(ReadOnlySpan<byte> bytes) =>
         Convert.ToBase64String(bytes)

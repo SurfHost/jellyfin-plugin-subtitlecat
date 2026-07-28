@@ -16,6 +16,7 @@ public class PluginPlumbingTests
     {
         var original = new SubtitleCatId
         {
+            Kind = SubtitleCatIdKind.Stored,
             Href = "/subs/757/Dune.Part.Two.2024.1080p.BluRay.x264.AAC5.1-[YTS.MX]-nl.srt",
             Language = "dut",
             HearingImpaired = true,
@@ -25,10 +26,50 @@ public class PluginPlumbingTests
         Assert.True(SubtitleCatId.TryDecode(original.Encode(), out var decoded, out _));
 
         Assert.NotNull(decoded);
-        Assert.Equal(original.Href, decoded!.Href);
+        Assert.Equal(SubtitleCatIdKind.Stored, decoded!.Kind);
+        Assert.Equal(original.Href, decoded.Href);
         Assert.Equal("dut", decoded.Language);
         Assert.True(decoded.HearingImpaired);
         Assert.False(decoded.Forced);
+    }
+
+    [Fact]
+    public void SubtitleId_CarriesWhatATranslationNeeds()
+    {
+        var original = new SubtitleCatId
+        {
+            Kind = SubtitleCatIdKind.Translate,
+            Href = "/subs/789/Some.Release-orig.srt",
+            Language = "dut",
+            TargetLanguage = "nl",
+            SourceLanguage = "en"
+        };
+
+        Assert.True(SubtitleCatId.TryDecode(original.Encode(), out var decoded, out _));
+
+        // GetSubtitles is handed nothing but this string, so the source and target have
+        // to survive it or the translation cannot be set up at download time.
+        Assert.Equal(SubtitleCatIdKind.Translate, decoded!.Kind);
+        Assert.Equal("nl", decoded.TargetLanguage);
+        Assert.Equal("en", decoded.SourceLanguage);
+        Assert.Equal(original.Href, decoded.Href);
+    }
+
+    [Fact]
+    public void SubtitleId_HandlesAnUnknownSourceLanguage()
+    {
+        var encoded = new SubtitleCatId
+        {
+            Kind = SubtitleCatIdKind.Translate,
+            Href = "/subs/1/x-orig.srt",
+            Language = "dut",
+            TargetLanguage = "nl",
+            SourceLanguage = null
+        }.Encode();
+
+        Assert.True(SubtitleCatId.TryDecode(encoded, out var decoded, out _));
+        Assert.Null(decoded!.SourceLanguage);
+        Assert.Equal("nl", decoded.TargetLanguage);
     }
 
     [Fact]
@@ -38,7 +79,13 @@ public class PluginPlumbingTests
         // back and one set to dut must get dut. Normalising would rename people's files.
         foreach (var language in new[] { "dut", "nld", "nl" })
         {
-            var encoded = new SubtitleCatId { Href = "/subs/1/x-nl.srt", Language = language }.Encode();
+            var encoded = new SubtitleCatId
+            {
+                Kind = SubtitleCatIdKind.Stored,
+                Href = "/subs/1/x-nl.srt",
+                Language = language
+            }.Encode();
+
             Assert.True(SubtitleCatId.TryDecode(encoded, out var decoded, out _));
             Assert.Equal(language, decoded!.Language);
         }
@@ -47,8 +94,9 @@ public class PluginPlumbingTests
     [Theory]
     [InlineData("")]
     [InlineData("garbage")]
-    [InlineData("sc9.dut.n.aGk")]
-    [InlineData("sc1.dut.n.!!!not-base64!!!")]
+    [InlineData("sc9.d.dut.n.nl.en.aGk")]
+    [InlineData("sc1.dut.n.aGk")]
+    [InlineData("sc2.d.dut.n.nl.en.!!!not-base64!!!")]
     public void SubtitleId_RefusesWhatItCannotRead(string value)
     {
         Assert.False(SubtitleCatId.TryDecode(value, out var decoded, out var error));

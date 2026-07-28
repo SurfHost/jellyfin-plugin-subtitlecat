@@ -157,6 +157,66 @@
                 </div>
 
                 <div class="sc-section">
+                    <h3 class="sectionTitle">Translate on the fly</h3>
+                    <p class="fieldDescription">
+                        subtitlecat only stores a subtitle in a language once somebody has generated it. When yours
+                        is missing, the plugin can fetch the original and translate it here instead. That work happens
+                        when you pick the result, not while searching, and takes a minute or two for a film.
+                    </p>
+
+                    <div class="sc-grid">
+                        <div class="sc-field selectContainer" style="grid-column: 1 / -1;">
+                            <select is="emby-select" id="TranslationBackend" label="Translation backend">
+                                <option value="None">Off, only use subtitles the site already has</option>
+                                <option value="LibreTranslate">LibreTranslate (self-hosted)</option>
+                                <option value="GoogleTranslate">Google Translate (free, no key)</option>
+                                <option value="DeepL">DeepL (best quality, needs a key)</option>
+                            </select>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription" style="grid-column: 1 / -1;">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="OfferTranslationAlongsideStored" />
+                                <span>Also offer a fresh translation when the site already has one</span>
+                            </label>
+                            <div class="fieldDescription">
+                                What subtitlecat stores is Google output. Leave this on if your backend does better,
+                                and you will see both entries and can pick.
+                            </div>
+                        </div>
+
+                        <div class="sc-field inputContainer" style="grid-column: 1 / -1;">
+                            <input is="emby-input" type="text" id="LibreTranslateUrl" label="LibreTranslate address" />
+                            <div class="fieldDescription">
+                                For example http://192.168.106.3:5000. Nothing leaves your network with this one.
+                            </div>
+                        </div>
+
+                        <div class="sc-field inputContainer">
+                            <input is="emby-input" type="password" id="LibreTranslateApiKey" label="LibreTranslate API key (usually empty)" />
+                        </div>
+
+                        <div class="sc-field inputContainer">
+                            <input is="emby-input" type="password" id="DeepLApiKey" label="DeepL API key" />
+                            <div class="fieldDescription">A free-tier key ends in :fx and is detected automatically.</div>
+                        </div>
+
+                        <div class="sc-field inputContainer">
+                            <input is="emby-input" type="number" id="TranslationBatchSize" label="Lines per request" min="1" max="200" />
+                            <div class="fieldDescription">DeepL caps this at 50 and the plugin splits automatically.</div>
+                        </div>
+
+                        <div class="sc-field inputContainer">
+                            <input is="emby-input" type="number" id="TranslationRequestDelayMs" label="Delay between translation requests (ms)" min="0" max="10000" />
+                        </div>
+
+                        <div class="sc-field inputContainer">
+                            <input is="emby-input" type="number" id="TranslationTimeoutSeconds" label="Time limit per file (seconds)" min="30" max="1800" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sc-section">
                     <h3 class="sectionTitle">Networking</h3>
                     <div class="sc-grid">
                         <div class="sc-field inputContainer">
@@ -220,6 +280,21 @@
                     page.querySelector('#CacheMinutes').value = cfg.CacheMinutes != null ? cfg.CacheMinutes : 30;
                     page.querySelector('#BaseUrl').value = cfg.BaseUrl || 'https://www.subtitlecat.com';
                     page.querySelector('#UserAgent').value = cfg.UserAgent || '';
+
+                    // The server may hand this back as the enum's name or as its number,
+                    // depending on how the configuration was serialised. Accepting both
+                    // avoids silently showing "off" for a backend that is actually set.
+                    var backends = ['None', 'LibreTranslate', 'GoogleTranslate', 'DeepL'];
+                    var backend = cfg.TranslationBackend;
+                    if (typeof backend === 'number') { backend = backends[backend] || 'None'; }
+                    page.querySelector('#TranslationBackend').value = backend || 'None';
+                    page.querySelector('#OfferTranslationAlongsideStored').checked = cfg.OfferTranslationAlongsideStored !== false;
+                    page.querySelector('#LibreTranslateUrl').value = cfg.LibreTranslateUrl || 'http://localhost:5000';
+                    page.querySelector('#LibreTranslateApiKey').value = cfg.LibreTranslateApiKey || '';
+                    page.querySelector('#DeepLApiKey').value = cfg.DeepLApiKey || '';
+                    page.querySelector('#TranslationBatchSize').value = cfg.TranslationBatchSize || 40;
+                    page.querySelector('#TranslationRequestDelayMs').value = cfg.TranslationRequestDelayMs != null ? cfg.TranslationRequestDelayMs : 250;
+                    page.querySelector('#TranslationTimeoutSeconds').value = cfg.TranslationTimeoutSeconds || 300;
                 }).finally(function () {
                     Dashboard.hideLoadingMsg();
                 });
@@ -309,6 +384,16 @@
                     if (isNaN(cfg.CacheMinutes)) { cfg.CacheMinutes = 30; }
                     cfg.BaseUrl = page.querySelector('#BaseUrl').value.trim() || 'https://www.subtitlecat.com';
                     cfg.UserAgent = page.querySelector('#UserAgent').value.trim();
+
+                    cfg.TranslationBackend = page.querySelector('#TranslationBackend').value;
+                    cfg.OfferTranslationAlongsideStored = page.querySelector('#OfferTranslationAlongsideStored').checked;
+                    cfg.LibreTranslateUrl = page.querySelector('#LibreTranslateUrl').value.trim();
+                    cfg.LibreTranslateApiKey = page.querySelector('#LibreTranslateApiKey').value.trim();
+                    cfg.DeepLApiKey = page.querySelector('#DeepLApiKey').value.trim();
+                    cfg.TranslationBatchSize = parseInt(page.querySelector('#TranslationBatchSize').value, 10) || 40;
+                    cfg.TranslationRequestDelayMs = parseInt(page.querySelector('#TranslationRequestDelayMs').value, 10);
+                    if (isNaN(cfg.TranslationRequestDelayMs)) { cfg.TranslationRequestDelayMs = 250; }
+                    cfg.TranslationTimeoutSeconds = parseInt(page.querySelector('#TranslationTimeoutSeconds').value, 10) || 300;
 
                     ApiClient.updatePluginConfiguration(SubtitleCatPluginId, cfg).then(function (result) {
                         Dashboard.processPluginConfigurationUpdateResult(result);
