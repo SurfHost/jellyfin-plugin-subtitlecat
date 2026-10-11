@@ -1,7 +1,7 @@
 {
   "guid": "6d16c1a0-4868-4ddb-8d48-6fd5eb0ecac6",
   "name": "SubtitleCat",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "targetAbi": "12.2.0.0",
   "framework": "net10.0",
   "owner": "SurfHost",
