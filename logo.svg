@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <radialGradient id="bg" cx="0.3" cy="0.45" r="0.9">
+      <stop offset="0" stop-color="#1d2747"/>
+      <stop offset="1" stop-color="#0a0f1e"/>
+    </radialGradient>
+    <!-- One gradient across the whole head, so the ears and face read as one shape. -->
+    <linearGradient id="jf" gradientUnits="userSpaceOnUse" x1="-290" y1="-330" x2="290" y2="230">
+      <stop offset="0" stop-color="#aa5cc3"/>
+      <stop offset="1" stop-color="#00a4dc"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+
+  <g transform="translate(500 586) scale(0.86)">
+    <!-- Ears. -->
+    <path d="M -262 -70 L -214 -318 L -40 -196 Z" fill="url(#jf)" stroke="url(#jf)" stroke-width="44" stroke-linejoin="round"/>
+    <path d="M 262 -70 L 214 -318 L 40 -196 Z" fill="url(#jf)" stroke="url(#jf)" stroke-width="44" stroke-linejoin="round"/>
+    <!-- Face. -->
+    <rect x="-290" y="-230" width="580" height="450" rx="190" fill="url(#jf)"/>
+    <!-- Inner ears, drawn over the face so nothing clips them. -->
+    <g opacity="0.25" fill="#0a0f1e" stroke="#0a0f1e" stroke-width="22" stroke-linejoin="round">
+      <path d="M -214 -218 L -202 -282 L -142 -240 Z"/>
+      <path d="M 214 -218 L 202 -282 L 142 -240 Z"/>
+    </g>
+
+    <!-- Eyes. -->
+    <ellipse cx="-110" cy="-62" rx="40" ry="52" fill="#0a0f1e"/>
+    <ellipse cx="110" cy="-62" rx="40" ry="52" fill="#0a0f1e"/>
+    <circle cx="-96" cy="-82" r="13" fill="#fff"/>
+    <circle cx="124" cy="-82" r="13" fill="#fff"/>
+    <!-- Nose. -->
+    <path d="M -22 8 L 22 8 L 0 32 Z" fill="#0a0f1e" stroke="#0a0f1e" stroke-width="12" stroke-linejoin="round"/>
+
+    <!-- Two lines of subtitle text across the lower face, split into words. -->
+    <g fill="#fff">
+      <rect x="-176" y="84" width="112" height="30" rx="15"/>
+      <rect x="-44" y="84" width="96" height="30" rx="15"/>
+      <rect x="72" y="84" width="104" height="30" rx="15"/>
+    </g>
+    <g fill="#fff" fill-opacity="0.8">
+      <rect x="-124" y="134" width="132" height="30" rx="15"/>
+      <rect x="28" y="134" width="96" height="30" rx="15"/>
+    </g>
+
+    <!-- Whiskers, outside the face. -->
+    <g stroke="#fff" stroke-width="13" stroke-linecap="round" stroke-opacity="0.9">
+      <line x1="-318" y1="4" x2="-414" y2="-12"/>
+      <line x1="-318" y1="42" x2="-420" y2="50"/>
+      <line x1="318" y1="4" x2="414" y2="-12"/>
+      <line x1="318" y1="42" x2="420" y2="50"/>
+    </g>
+  </g>
+
+  <text x="940" y="532" font-family="Segoe UI, sans-serif" font-weight="700" font-size="164" fill="#ffffff" letter-spacing="-2">SubtitleCat</text>
+  <text x="946" y="626" font-family="Segoe UI, sans-serif" font-weight="400" font-size="52" fill="#a9b6d6">Subtitles matched on release name</text>
+</svg>

@@ -6,7 +6,7 @@
     "overview": "Subtitles from subtitlecat.com, matched on release name.",
     "owner": "SurfHost",
     "category": "Subtitles",
-    "imageUrl": "",
+    "imageUrl": "https://raw.githubusercontent.com/SurfHost/jellyfin-plugin-subtitlecat/main/logo.png",
     "versions": [
       {
         "version": "0.3.0",

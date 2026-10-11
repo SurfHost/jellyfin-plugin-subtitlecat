@@ -1,5 +1,7 @@
 # SubtitleCat for Jellyfin
 
+<p align="center"><img src="logo.png" alt="SubtitleCat for Jellyfin" width="640"></p>
+
 Subtitles from [subtitlecat.com](https://www.subtitlecat.com), matched on the release name Jellyfin already knows
 from your media file.
 
@@ -129,8 +131,8 @@ The tests run against pages saved from the live site under `Jellyfin.Plugin.Subt
 regexes over someone else's markup, so the fixtures are the only thing standing between a site redesign and a silent
 failure. If subtitlecat changes its layout, refresh the fixtures and the failing assertions will show you what moved.
 
-To install a local build by hand, copy `Jellyfin.Plugin.SubtitleCat.dll` and `meta.json` into
-`<jellyfin-config>/plugins/SubtitleCat_0.3.0.0/` and restart.
+To install a local build by hand, copy `Jellyfin.Plugin.SubtitleCat.dll`, `meta.json` and `logo.png` into
+`<jellyfin-config>/plugins/SubtitleCat_0.3.1.0/` and restart.
 
 ## Notes
 

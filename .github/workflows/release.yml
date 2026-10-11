@@ -172,13 +172,13 @@ jobs:
           cp Jellyfin.Plugin.SubtitleCat/meta.json meta.json
           # -j flattens paths so the zip is flat; Jellyfin extracts it verbatim into
           # <plugins>/<name>_<version>/ and a nested folder would break it.
-          zip -j "subtitlecat_$VERSION.zip" publish/Jellyfin.Plugin.SubtitleCat.dll meta.json
+          zip -j "subtitlecat_$VERSION.zip" publish/Jellyfin.Plugin.SubtitleCat.dll meta.json logo.png
 
           # An exact allowlist rather than a blocklist of known-bad names. A blocklist
           # only catches what it was told about, so a new transitive dependency appearing
           # after a package bump would ship silently. This way, changing what is in the
-          # package requires editing this list.
-          EXPECTED=$'Jellyfin.Plugin.SubtitleCat.dll\nmeta.json'
+          # package requires editing this list. logo.png is named by meta.json's imagePath.
+          EXPECTED=$'Jellyfin.Plugin.SubtitleCat.dll\nlogo.png\nmeta.json'
           ACTUAL=$(unzip -Z1 "subtitlecat_$VERSION.zip" | LC_ALL=C sort)
           if [ "$ACTUAL" != "$EXPECTED" ]; then
             echo "::error::Package contents are not what this workflow expects." >&2
