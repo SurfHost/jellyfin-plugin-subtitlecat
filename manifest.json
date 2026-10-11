@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/SurfHost/jellyfin-plugin-subtitlecat/main/logo.png",
     "versions": [
       {
+        "version": "0.3.2",
+        "changelog": "Fixed: the plugin's logo disappeared from Jellyfin's plugin pages after a restart. The running plugin reported its version with four parts (0.3.1.0) while Jellyfin looks the image up by the three-part version from meta.json (0.3.1).",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/SurfHost/jellyfin-plugin-subtitlecat/releases/download/v0.3.2/subtitlecat_0.3.2.zip",
+        "checksum": "f504a2592c06e408c5a7e01d78296903",
+        "timestamp": "2026-10-11T23:59:50Z"
+      },
+      {
         "version": "0.3.1",
         "changelog": "A logo for the plugin, shown in Jellyfin's plugin catalog and on the installed plugins page. Repository changes, no effect on the plugin itself: The release zip now carries logo.png next to the dll and meta.json. logo.svg is the editable source of the logo.",
         "targetAbi": "12.2.0.0",
