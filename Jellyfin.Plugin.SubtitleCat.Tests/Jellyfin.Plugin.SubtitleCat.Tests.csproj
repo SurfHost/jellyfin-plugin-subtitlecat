@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -19,7 +19,7 @@
       test host has no Jellyfin around it, so the real assemblies have to be present or
       every test that touches a type from them fails to load.
     -->
-    <PackageReference Include="Jellyfin.Controller" Version="10.11.0" />
+    <PackageReference Include="Jellyfin.Controller" Version="12.2.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -89,6 +89,13 @@ start, so without the restart the provider will not appear.
 SubtitleCat on. A subtitle provider is inert until it is enabled there, and a plugin that is installed but not enabled
 looks exactly like a plugin that does not work.
 
+## Compatibility
+
+Jellyfin **12.2** (`targetAbi 12.2.0.0`), .NET 10.
+
+Jellyfin 10.11 servers can keep using SubtitleCat 0.2.0, the last release built for 10.11. It stays in the repository
+manifest, and Jellyfin only offers each server the versions whose `targetAbi` it supports.
+
 ## Configuration
 
 Everything has a working default. The ones worth knowing about:
@@ -108,7 +115,7 @@ nothing.
 
 ## Building
 
-Requires the .NET 9 SDK.
+Requires the .NET 10 SDK (pinned in `global.json`).
 
 ```bash
 dotnet build Jellyfin.Plugin.SubtitleCat/Jellyfin.Plugin.SubtitleCat.csproj -c Release
@@ -123,7 +130,7 @@ regexes over someone else's markup, so the fixtures are the only thing standing 
 failure. If subtitlecat changes its layout, refresh the fixtures and the failing assertions will show you what moved.
 
 To install a local build by hand, copy `Jellyfin.Plugin.SubtitleCat.dll` and `meta.json` into
-`<jellyfin-config>/plugins/SubtitleCat_0.1.0.0/` and restart.
+`<jellyfin-config>/plugins/SubtitleCat_0.3.0.0/` and restart.
 
 ## Notes
 
