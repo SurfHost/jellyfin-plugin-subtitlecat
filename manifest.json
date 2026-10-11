@@ -9,6 +9,14 @@
     "imageUrl": "",
     "versions": [
       {
+        "version": "0.3.0",
+        "changelog": "For Jellyfin 12.2. Jellyfin 12 runs on .NET 10 and no longer loads plugins built for 10.11, so this release is rebuilt for it. Servers still on Jellyfin 10.11 should stay on 0.2.0, which remains in the catalog for them. Built for Jellyfin 12.2 and .NET 10 (targetAbi 12.2.0.0). Nothing else changes: the subtitle provider, matching, translation backends and settings behave exactly as in 0.2.0, and existing settings carry over. Repository changes, no effect on the plugin itself: The release workflow reads the target framework and targetAbi from meta.json instead of hard-coding them, and fills the catalog changelog from this file instead of \"See the GitHub release notes.\" Builds use the .NET 10 SDK, pinned through a new global.json.",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/SurfHost/jellyfin-plugin-subtitlecat/releases/download/v0.3.0/subtitlecat_0.3.0.zip",
+        "checksum": "8ddfee8cfb61b5081fc13349178d7831",
+        "timestamp": "2026-10-11T17:42:33Z"
+      },
+      {
         "version": "0.2.0",
         "changelog": "See the GitHub release notes.",
         "targetAbi": "10.11.0.0",
