@@ -13,7 +13,8 @@
 
   <rect width="1920" height="1080" fill="url(#bg)"/>
 
-  <g transform="translate(500 586) scale(0.86)">
+  <!-- Emblem: a cat reading subtitles, centred in the emblem column. -->
+  <g transform="translate(408 580.5) scale(0.6753)">
     <!-- Ears. -->
     <path d="M -262 -70 L -214 -318 L -40 -196 Z" fill="url(#jf)" stroke="url(#jf)" stroke-width="44" stroke-linejoin="round"/>
     <path d="M 262 -70 L 214 -318 L 40 -196 Z" fill="url(#jf)" stroke="url(#jf)" stroke-width="44" stroke-linejoin="round"/>
@@ -53,6 +54,8 @@
     </g>
   </g>
 
-  <text x="940" y="532" font-family="Segoe UI, sans-serif" font-weight="700" font-size="164" fill="#ffffff" letter-spacing="-2">SubtitleCat</text>
-  <text x="946" y="626" font-family="Segoe UI, sans-serif" font-weight="400" font-size="52" fill="#a9b6d6">Subtitles matched on release name</text>
+  <!-- Plugin name. -->
+  <text x="756" y="489" font-family="Segoe UI, sans-serif" font-weight="700" font-size="200" fill="#ffffff" letter-spacing="-1">SubtitleCat</text>
+  <!-- Tagline, two lines, sized to stay readable on Jellyfin's small plugin cards. -->
+  <text font-family="Segoe UI, sans-serif" font-weight="600" font-size="100" fill="#d6def5"><tspan x="760" y="615">Subtitles matched</tspan><tspan x="760" y="731">on release name</tspan></text>
 </svg>
